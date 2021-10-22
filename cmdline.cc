@@ -138,9 +138,6 @@ struct custom_option custom_opts[] = {
     { { "disable_proc", no_argument, NULL, 0x0603 }, "Disable mounting procfs in the jail" },
     { { "proc_path", required_argument, NULL, 0x0605 }, "Path used to mount procfs (default: '/proc')" },
     { { "proc_rw", no_argument, NULL, 0x0606 }, "Is procfs mounted as R/W (default: R/O)" },
-    { { "seccomp_policy", required_argument, NULL, 'P' }, "Path to file containing seccomp-bpf policy (see kafel/)" },
-    { { "seccomp_string", required_argument, NULL, 0x0901 }, "String with kafel seccomp-bpf policy (see kafel/)" },
-    { { "seccomp_log", no_argument, NULL, 0x0902 }, "Use SECCOMP_FILTER_FLAG_LOG. Log all actions except SECCOMP_RET_ALLOW). Supported since kernel version 4.14" },
     { { "nice_level", required_argument, NULL, 0x0903 }, "Set jailed process niceness (-20 is highest -priority, 19 is lowest). By default, set to 19" },
     { { "cgroup_mem_max", required_argument, NULL, 0x0801 }, "Maximum number of bytes to use in the group (default: '0' - disabled)" },
     { { "cgroup_mem_memsw_max", required_argument, NULL, 0x0804 }, "Maximum number of memory+swap bytes to use (default: '0' - disabled)" },
@@ -481,9 +478,6 @@ std::unique_ptr<nsjconf_t> parseArgs(int argc, char* argv[]) {
 	nsjconf->orig_uid = getuid();
 	nsjconf->orig_euid = geteuid();
 	nsjconf->num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
-	nsjconf->seccomp_fprog.filter = NULL;
-	nsjconf->seccomp_fprog.len = 0;
-	nsjconf->seccomp_log = false;
 	nsjconf->nice_level = 19;
 
 	nsjconf->openfds.push_back(STDIN_FILENO);
@@ -903,15 +897,6 @@ std::unique_ptr<nsjconf_t> parseArgs(int argc, char* argv[]) {
 			break;
 		case 0x835:
 			nsjconf->use_cgroupv2 = true;
-			break;
-		case 'P':
-			nsjconf->kafel_file_path = optarg;
-			break;
-		case 0x901:
-			nsjconf->kafel_string = optarg;
-			break;
-		case 0x902:
-			nsjconf->seccomp_log = true;
 			break;
 		case 0x903:
 			nsjconf->nice_level = (int)strtol(optarg, NULL, 0);

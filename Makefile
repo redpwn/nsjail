@@ -28,15 +28,13 @@ COMMON_FLAGS += -O2 -c \
 	-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 \
 	-fPIE \
 	-Wformat -Wformat-security -Wno-format-nonliteral \
-	-Wall -Wextra -Werror \
-	-Ikafel/include
+	-Wall -Wextra -Werror
 
-CXXFLAGS += $(USER_DEFINES) $(COMMON_FLAGS) $(shell pkg-config --cflags protobuf) \
+CXXFLAGS += $(USER_DEFINES) $(COMMON_FLAGS) $(shell pkg-config --cflags protobuf libseccomp) \
 	-std=c++11 -fno-exceptions -Wno-unused -Wno-unused-parameter
-LDFLAGS += -pie -Wl,-z,noexecstack -lpthread $(shell pkg-config --libs protobuf)
+LDFLAGS += -pie -Wl,-z,noexecstack -lpthread $(shell pkg-config --libs protobuf libseccomp)
 
 BIN = nsjail
-LIBS = kafel/libkafel.a
 SRCS_CXX = caps.cc cgroup.cc cgroup2.cc cmdline.cc config.cc contain.cc cpu.cc logs.cc mnt.cc net.cc nsjail.cc pid.cc sandbox.cc subproc.cc uts.cc user.cc util.cc
 SRCS_PROTO = config.proto
 SRCS_PB_CXX = $(SRCS_PROTO:.proto=.pb.cc)
@@ -56,9 +54,6 @@ endif
 
 .PHONY: all clean depend indent
 
-.cc.o: %.cc
-	$(CXX) $(CXXFLAGS) $< -o $@
-
 all: $(BIN)
 
 $(BIN): $(LIBS) $(OBJS)
@@ -69,16 +64,6 @@ ifneq ($(NL3_EXISTS), yes)
 endif
 	$(CXX) -o $(BIN) $(OBJS) $(LIBS) $(LDFLAGS)
 
-.PHONY: kafel_init
-kafel_init:
-ifeq ("$(wildcard kafel/Makefile)","")
-	git submodule update --init
-endif
-
-kafel/include/kafel.h: kafel_init
-kafel/libkafel.a: kafel_init
-	CFLAGS=-fPIE $(MAKE) -C kafel
-
 # Sequence of proto deps, which doesn't fit automatic make rules
 config.o: $(SRCS_PB_O) $(SRCS_PB_H)
 $(SRCS_PB_O): $(SRCS_PB_CXX) $(SRCS_PB_H)
@@ -88,13 +73,6 @@ $(SRCS_PB_CXX) $(SRCS_PB_H): $(SRCS_PROTO)
 .PHONY: clean
 clean:
 	$(RM) core Makefile.bak $(OBJS) $(SRCS_PB_CXX) $(SRCS_PB_H) $(BIN)
-ifneq ("$(wildcard kafel/Makefile)","")
-	$(MAKE) -C kafel clean
-endif
-
-.PHONY: depend
-depend: all
-	makedepend -Y -Ykafel/include -- -- $(SRCS_CXX) $(SRCS_PB_CXX)
 
 .PHONY: indent
 indent:
@@ -118,7 +96,7 @@ mnt.o: mnt.h nsjail.h logs.h macros.h subproc.h util.h
 net.o: net.h nsjail.h logs.h subproc.h
 nsjail.o: nsjail.h cmdline.h logs.h macros.h net.h sandbox.h subproc.h util.h
 pid.o: pid.h nsjail.h logs.h subproc.h
-sandbox.o: sandbox.h nsjail.h kafel/include/kafel.h logs.h util.h
+sandbox.o: sandbox.h nsjail.h logs.h util.h
 subproc.o: subproc.h nsjail.h cgroup.h cgroup2.h contain.h logs.h macros.h
 subproc.o: net.h sandbox.h user.h util.h
 uts.o: uts.h nsjail.h logs.h

@@ -25,6 +25,7 @@
 
 #include <linux/filter.h>
 #include <netinet/ip6.h>
+#include <seccomp.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -161,10 +162,7 @@ struct nsjconf_t {
 	unsigned int cgroup_cpu_ms_per_sec;
 	std::string cgroupv2_mount;
 	bool use_cgroupv2;
-	std::string kafel_file_path;
-	std::string kafel_string;
-	struct sock_fprog seccomp_fprog;
-	bool seccomp_log;
+	scmp_filter_ctx seccomp_ctx;
 	int nice_level;
 	long num_cpus;
 	uid_t orig_uid;
