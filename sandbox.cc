@@ -53,7 +53,7 @@ bool preparePolicy(nsjconf_t* nsjconf) {
 	}
 
 	for (int sys :
-	    {SCMP_SYS(mount), SCMP_SYS(sethostname), SCMP_SYS(umount), SCMP_SYS(pivot_root)}) {
+	    {SCMP_SYS(mount), SCMP_SYS(sethostname), SCMP_SYS(umount2), SCMP_SYS(pivot_root)}) {
 		if (seccomp_rule_add(nsjconf->seccomp_ctx, SCMP_ACT_ERRNO(EPERM), sys, 0)) {
 			PLOG_E("seccomp_rule_add() failed");
 			return false;
