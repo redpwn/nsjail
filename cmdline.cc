@@ -409,7 +409,7 @@ std::string parseMACVlanMode(const char* optarg) {
 }
 
 std::unique_ptr<nsjconf_t> parseArgs(int argc, char* argv[]) {
-	std::unique_ptr<nsjconf_t> nsjconf(new nsjconf_t);
+	std::unique_ptr<nsjconf_t> nsjconf(new nsjconf_t{});
 
 	nsjconf->use_execveat = false;
 	nsjconf->exec_fd = -1;
