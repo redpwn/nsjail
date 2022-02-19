@@ -60,8 +60,19 @@ bool preparePolicy(nsjconf_t* nsjconf) {
 		return false;
 	}
 
-	if (seccomp_arch_add(seccomp_ctx.get(), SCMP_ARCH_X86)) {
-		PLOG_E("seccomp_arch_add(SCMP_ARCH_X86) failed");
+	auto arch = seccomp_arch_native();
+	if (arch == SCMP_ARCH_X86_64) {
+		if (seccomp_arch_add(seccomp_ctx.get(), SCMP_ARCH_X86)) {
+			PLOG_E("seccomp_arch_add(SCMP_ARCH_X86) failed");
+			return false;
+		}
+	} else if (arch == SCMP_ARCH_AARCH64) {
+		if (seccomp_arch_add(seccomp_ctx.get(), SCMP_ARCH_ARM)) {
+			PLOG_E("seccomp_arch_add(SCMP_ARCH_ARM) failed");
+			return false;
+		}
+	} else {
+		PLOG_E("native arch is not amd64 or arm64");
 		return false;
 	}
 
