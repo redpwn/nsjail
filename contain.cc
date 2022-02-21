@@ -119,6 +119,22 @@ static bool containCPU(nsjconf_t* nsjconf) {
 	return cpu::initCpu(nsjconf);
 }
 
+static bool containTSC(nsjconf_t* nsjconf) {
+	if (nsjconf->disable_tsc) {
+#if defined(__x86_64__) || defined(__i386__)
+		if (prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0) == -1) {
+			PLOG_E("prctl(PR_SET_TSC, PR_TSC_SIGSEGV)");
+			return false;
+		}
+#else  /* defined(__x86_64__) || defined(__i386__) */
+		LOG_W(
+		    "prctl(PR_SET_TSC, PR_TSC_SIGSEGV) requested, but it's supported under "
+		    "x86/x86-64 CPU architectures only. Ignoring it!");
+#endif /* defined(__x86_64__) || defined(__i386__) */
+	}
+	return true;
+}
+
 static bool containSetLimits(nsjconf_t* nsjconf) {
 	if (nsjconf->disable_rl) {
 		return true;
@@ -326,6 +342,7 @@ bool containProc(nsjconf_t* nsjconf) {
 	/* */
 	/* As non-root */
 	RETURN_ON_FAILURE(containCPU(nsjconf));
+	RETURN_ON_FAILURE(containTSC(nsjconf));
 	RETURN_ON_FAILURE(containSetLimits(nsjconf));
 	RETURN_ON_FAILURE(containPrepareEnv(nsjconf));
 	RETURN_ON_FAILURE(containMakeFdsCOE(nsjconf));
