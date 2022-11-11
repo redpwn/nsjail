@@ -31,7 +31,7 @@ COMMON_FLAGS += -O2 -c \
 	-Wall -Wextra -Werror
 
 CXXFLAGS += $(USER_DEFINES) $(COMMON_FLAGS) $(shell pkg-config --cflags protobuf libseccomp) \
-	-std=c++11 -fno-exceptions -Wno-unused -Wno-unused-parameter
+	-std=c++14 -fno-exceptions -Wno-unused -Wno-unused-parameter
 LDFLAGS += -pie -Wl,-z,noexecstack -lpthread $(shell pkg-config --libs protobuf libseccomp)
 
 BIN = nsjail

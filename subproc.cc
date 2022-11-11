@@ -63,7 +63,7 @@ namespace subproc {
 #define CLONE_NEWTIME 0x00000080
 #endif /* !defined(CLONE_NEWTIME) */
 
-static const std::string cloneFlagsToStr(uintptr_t flags) {
+static const std::string cloneFlagsToStr(uint64_t flags) {
 	std::string res;
 
 	struct {
@@ -112,7 +112,7 @@ static const std::string cloneFlagsToStr(uintptr_t flags) {
 	}
 
 	if (flags & ~(knownFlagMask)) {
-		util::StrAppend(&res, "|%#tx", flags & ~(knownFlagMask));
+		util::StrAppend(&res, "|%#" PRIx64, flags & ~(knownFlagMask));
 	}
 	return res;
 }
@@ -139,8 +139,20 @@ static bool resetEnv(void) {
 static const char kSubprocDoneChar = 'D';
 static const char kSubprocErrorChar = 'E';
 
-static void subprocNewProc(
-    nsjconf_t* nsjconf, int netfd, int fd_in, int fd_out, int fd_err, int pipefd) {
+static const std::string concatArgs(const std::vector<const char*>& argv) {
+	std::string ret;
+	for (const auto& s : argv) {
+		if (s) {
+			if (!ret.empty()) {
+				ret.append(", ");
+			}
+			ret.append(util::StrQuote(s));
+		}
+	}
+	return ret;
+}
+
+static void newProc(nsjconf_t* nsjconf, int netfd, int fd_in, int fd_out, int fd_err, int pipefd) {
 	if (!contain::setupFD(nsjconf, fd_in, fd_out, fd_err)) {
 		return;
 	}
@@ -182,14 +194,16 @@ static void subprocNewProc(
 	}
 
 	auto connstr = net::connToText(netfd, /* remote= */ true, NULL);
-	LOG_I("Executing '%s' for '%s'", nsjconf->exec_file.c_str(), connstr.c_str());
+	LOG_I("Executing %s for '%s'", util::StrQuote(nsjconf->exec_file).c_str(), connstr.c_str());
 
 	std::vector<const char*> argv;
 	for (const auto& s : nsjconf->argv) {
 		argv.push_back(s.c_str());
-		LOG_D(" Arg: '%s'", s.c_str());
 	}
 	argv.push_back(nullptr);
+
+	LOG_D("Exec: %s, Args: [%s]", util::StrQuote(nsjconf->exec_file).c_str(),
+	    concatArgs(argv).c_str());
 
 	/* Should be the last one in the sequence */
 	if (!sandbox::applyPolicy(nsjconf)) {
@@ -226,7 +240,7 @@ static void addProc(nsjconf_t* nsjconf, pid_t pid, int sock) {
 	}
 	nsjconf->pids.insert(std::make_pair(pid, p));
 
-	LOG_D("Added pid=%d with start time '%u' to the queue for IP: '%s'", pid,
+	LOG_D("Added pid=%d with start time %u to the queue for IP: '%s'", pid,
 	    (unsigned int)p.start, p.remote_txt.c_str());
 }
 
@@ -266,7 +280,7 @@ static void seccompViolation(nsjconf_t* nsjconf, siginfo_t* si) {
 	const auto& p = nsjconf->pids.find(si->si_pid);
 	if (p == nsjconf->pids.end()) {
 		LOG_W(
-		    "pid=%d SiStatus:%d SiUid:%d SiUime:%ld SiStime:%ld (If "
+		    "pid=%d SiStatus:%d SiUid:%d SiUtime:%ld SiStime:%ld (If "
 		    "SiStatus==31 (SIGSYS), then see 'dmesg' or 'journalctl -ek' for possible "
 		    "auditd report with more data)",
 		    (int)si->si_pid, si->si_status, si->si_uid, (long)si->si_utime,
@@ -279,7 +293,7 @@ static void seccompViolation(nsjconf_t* nsjconf, siginfo_t* si) {
 	ssize_t rdsize = util::readFromFd(p->second.pid_syscall_fd, buf, sizeof(buf) - 1);
 	if (rdsize < 1) {
 		LOG_W(
-		    "pid=%d SiStatus:%d SiUid:%d SiUime:%ld SiStime:%ld (If "
+		    "pid=%d SiStatus:%d SiUid:%d SiUtime:%ld SiStime:%ld (If "
 		    "SiStatus==31 (SIGSYS), then see 'dmesg' or 'journalctl -ek' for possible "
 		    "auditd report with more data)",
 		    (int)si->si_pid, si->si_status, si->si_uid, (long)si->si_utime,
@@ -299,7 +313,7 @@ static void seccompViolation(nsjconf_t* nsjconf, siginfo_t* si) {
 		    (int)si->si_pid, sc, arg1, arg2, arg3, arg4, arg5, arg6, sp, pc, si->si_status);
 	} else if (ret == 3) {
 		LOG_W(
-		    "pid=%d SiStatus:%d SiUid:%d SiUime:%ld SiStime:%ld SP:%#tx, PC:%#tx (If "
+		    "pid=%d SiStatus:%d SiUid:%d SiUtime:%ld SiStime:%ld SP:%#tx, PC:%#tx (If "
 		    "SiStatus==31 (SIGSYS), then see 'dmesg' or 'journalctl -ek' for possible "
 		    "auditd report with more data)",
 		    (int)si->si_pid, si->si_status, si->si_uid, (long)si->si_utime,
@@ -307,7 +321,7 @@ static void seccompViolation(nsjconf_t* nsjconf, siginfo_t* si) {
 		return;
 	} else {
 		LOG_W(
-		    "pid=%d SiStatus:%d SiUid:%d SiUime:%ld SiStime:%ld (If "
+		    "pid=%d SiStatus:%d SiUid:%d SiUtime:%ld SiStime:%ld (If "
 		    "SiStatus==31 (SIGSYS), then see 'dmesg' or 'journalctl -ek' for possible "
 		    "auditd report with more data)",
 		    (int)si->si_pid, si->si_status, si->si_uid, (long)si->si_utime,
@@ -389,10 +403,10 @@ int reapProc(nsjconf_t* nsjconf) {
 	return rv;
 }
 
-void killAndReapAll(nsjconf_t* nsjconf) {
+void killAndReapAll(nsjconf_t* nsjconf, int signal) {
 	while (!nsjconf->pids.empty()) {
 		pid_t pid = nsjconf->pids.begin()->first;
-		if (kill(pid, SIGKILL) == 0) {
+		if (kill(pid, signal) == 0) {
 			reapProc(nsjconf, pid, true);
 		} else {
 			removeProc(nsjconf, pid);
@@ -431,7 +445,7 @@ pid_t runChild(nsjconf_t* nsjconf, int netfd, int fd_in, int fd_out, int fd_err)
 	if (!net::limitConns(nsjconf, netfd)) {
 		return 0;
 	}
-	unsigned long flags = 0UL;
+	uint64_t flags = 0UL;
 	flags |= (nsjconf->clone_newnet ? CLONE_NEWNET : 0);
 	flags |= (nsjconf->clone_newuser ? CLONE_NEWUSER : 0);
 	flags |= (nsjconf->clone_newns ? CLONE_NEWNS : 0);
@@ -446,7 +460,7 @@ pid_t runChild(nsjconf_t* nsjconf, int netfd, int fd_in, int fd_out, int fd_err)
 		if (unshare(flags) == -1) {
 			PLOG_F("unshare(%s)", cloneFlagsToStr(flags).c_str());
 		}
-		subprocNewProc(nsjconf, netfd, fd_in, fd_out, fd_err, -1);
+		newProc(nsjconf, netfd, fd_in, fd_out, fd_err, -1);
 		LOG_F("Launching new process failed");
 	}
 
@@ -464,7 +478,7 @@ pid_t runChild(nsjconf_t* nsjconf, int netfd, int fd_in, int fd_out, int fd_err)
 	pid_t pid = cloneProc(flags, SIGCHLD);
 	if (pid == 0) {
 		close(parent_fd);
-		subprocNewProc(nsjconf, netfd, fd_in, fd_out, fd_err, child_fd);
+		newProc(nsjconf, netfd, fd_in, fd_out, fd_err, child_fd);
 		util::writeToFd(child_fd, &kSubprocErrorChar, sizeof(kSubprocErrorChar));
 		LOG_F("Launching child process failed");
 	}
@@ -513,7 +527,7 @@ static int cloneFunc(void* arg __attribute__((unused))) {
  * update the internal PID/TID caches, what can lead to invalid values being returned by getpid()
  * or incorrect PID/TIDs used in raise()/abort() functions
  */
-pid_t cloneProc(uintptr_t flags, int exit_signal) {
+pid_t cloneProc(uint64_t flags, int exit_signal) {
 	exit_signal &= CSIGNAL;
 
 	if (flags & CLONE_VM) {
@@ -530,7 +544,7 @@ pid_t cloneProc(uintptr_t flags, int exit_signal) {
 
 #if defined(__NR_clone3)
 	struct clone_args ca = {};
-	ca.flags = (uint64_t)flags;
+	ca.flags = flags;
 	ca.exit_signal = (uint64_t)exit_signal;
 
 	pid_t ret = util::syscall(__NR_clone3, (uintptr_t)&ca, sizeof(ca));
@@ -554,7 +568,7 @@ pid_t cloneProc(uintptr_t flags, int exit_signal) {
 		 */
 		void* stack = &cloneStack[sizeof(cloneStack) / 2];
 		/* Parent */
-		return clone(cloneFunc, stack, flags | exit_signal, NULL, NULL, NULL);
+		return clone(cloneFunc, stack, (int)flags | exit_signal, NULL, NULL, NULL);
 	}
 	/* Child */
 	return 0;

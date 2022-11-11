@@ -28,6 +28,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <string>
 
 #include "logs.h"
@@ -109,9 +110,7 @@ static const std::string capToStr(int val) {
 	}
 
 	std::string res;
-	res.append("CAP_UNKNOWN(");
-	res.append(std::to_string(val));
-	res.append(")");
+	res.append("CAP_UNKNOWN(").append(std::to_string(val)).append(")");
 	return res;
 }
 

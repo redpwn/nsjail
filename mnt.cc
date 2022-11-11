@@ -53,11 +53,11 @@ namespace mnt {
 #define MS_LAZYTIME (1 << 25)
 #endif /* if !defined(MS_LAZYTIME) */
 
-static const std::string flagsToStr(uintptr_t flags) {
+static const std::string flagsToStr(unsigned long flags) {
 	std::string res;
 
 	struct {
-		const uint64_t flag;
+		const unsigned long flag;
 		const char* const name;
 	} static const mountFlags[] = {
 		NS_VALSTR_STRUCT(MS_RDONLY),
@@ -92,7 +92,7 @@ static const std::string flagsToStr(uintptr_t flags) {
 #endif /* defined(MS_NOUSER) */
 	};
 
-	uint64_t knownFlagMask = 0U;
+	unsigned knownFlagMask = 0U;
 	for (const auto& i : mountFlags) {
 		if (flags & i.flag) {
 			if (!res.empty()) {
@@ -104,7 +104,7 @@ static const std::string flagsToStr(uintptr_t flags) {
 	}
 
 	if (flags & ~(knownFlagMask)) {
-		util::StrAppend(&res, "|%#tx", flags & ~(knownFlagMask));
+		util::StrAppend(&res, "|%#lx", flags & ~(knownFlagMask));
 	}
 
 	return res;
@@ -129,7 +129,7 @@ static bool isDir(const char* path) {
 }
 
 static bool mountPt(mount_t* mpt, const char* newroot, const char* tmpdir) {
-	LOG_D("Mounting '%s'", describeMountPt(*mpt).c_str());
+	LOG_D("Mounting %s", describeMountPt(*mpt).c_str());
 
 	char dstpath[PATH_MAX];
 	snprintf(dstpath, sizeof(dstpath), "%s/%s", newroot, mpt->dst.c_str());
@@ -147,14 +147,17 @@ static bool mountPt(mount_t* mpt, const char* newroot, const char* tmpdir) {
 	}
 
 	if (mpt->is_symlink) {
-		LOG_D("symlink('%s', '%s')", srcpath, dstpath);
+		LOG_D("symlink(%s, %s)", util::StrQuote(srcpath).c_str(),
+		    util::StrQuote(dstpath).c_str());
 		if (symlink(srcpath, dstpath) == -1) {
 			if (mpt->is_mandatory) {
-				PLOG_E("symlink('%s', '%s')", srcpath, dstpath);
+				PLOG_E("symlink('%s', '%s')", util::StrQuote(srcpath).c_str(),
+				    util::StrQuote(dstpath).c_str());
 				return false;
 			} else {
 				PLOG_W("symlink('%s', '%s'), but it's not mandatory, continuing",
-				    srcpath, dstpath);
+				    util::StrQuote(srcpath).c_str(),
+				    util::StrQuote(dstpath).c_str());
 			}
 		}
 		return true;
@@ -162,14 +165,14 @@ static bool mountPt(mount_t* mpt, const char* newroot, const char* tmpdir) {
 
 	if (mpt->is_dir) {
 		if (mkdir(dstpath, 0711) == -1 && errno != EEXIST) {
-			PLOG_W("mkdir('%s')", dstpath);
+			PLOG_W("mkdir(%s)", QC(dstpath));
 		}
 	} else {
 		int fd = TEMP_FAILURE_RETRY(open(dstpath, O_CREAT | O_RDONLY | O_CLOEXEC, 0644));
 		if (fd >= 0) {
 			close(fd);
 		} else {
-			PLOG_W("open('%s', O_CREAT|O_RDONLY|O_CLOEXEC, 0644)", dstpath);
+			PLOG_W("open(%s, O_CREAT|O_RDONLY|O_CLOEXEC, 0644)", QC(dstpath));
 		}
 	}
 
@@ -339,7 +342,7 @@ static std::unique_ptr<std::string> getDir(nsjconf_t* nsjconf, const char* name)
 		return dir;
 	}
 
-	LOG_E("Couldn't create tmp directory of type '%s'", name);
+	LOG_E("Couldn't create tmp directory of type '%s'", QC(name));
 	return nullptr;
 }
 
@@ -352,7 +355,7 @@ static bool initNoCloneNs(nsjconf_t* nsjconf) {
 		return true;
 	}
 	if (chroot(nsjconf->chroot.c_str()) == -1) {
-		PLOG_E("chroot('%s')", nsjconf->chroot.c_str());
+		PLOG_E("chroot('%s')", QC(nsjconf->chroot));
 		return false;
 	}
 	if (chdir("/") == -1) {
@@ -380,7 +383,7 @@ static bool initCloneNs(nsjconf_t* nsjconf) {
 		return false;
 	}
 	if (mount(NULL, destdir->c_str(), "tmpfs", 0, "size=16777216") == -1) {
-		PLOG_E("mount('%s', 'tmpfs')", destdir->c_str());
+		PLOG_E("mount('%s', 'tmpfs')", QC(*destdir));
 		return false;
 	}
 
@@ -390,19 +393,19 @@ static bool initCloneNs(nsjconf_t* nsjconf) {
 		return false;
 	}
 	if (mount(NULL, tmpdir->c_str(), "tmpfs", 0, "size=16777216") == -1) {
-		PLOG_E("mount('%s', 'tmpfs')", tmpdir->c_str());
+		PLOG_E("mount(%s, 'tmpfs')", QC(*tmpdir));
 		return false;
 	}
 
 	for (auto& p : nsjconf->mountpts) {
 		if (!mountPt(&p, destdir->c_str(), tmpdir->c_str()) && p.is_mandatory) {
-			LOG_E("Couldn't mount '%s'", p.dst.c_str());
+			LOG_E("Couldn't mount %s", QC(p.dst));
 			return false;
 		}
 	}
 
 	if (umount2(tmpdir->c_str(), MNT_DETACH) == -1) {
-		PLOG_E("umount2('%s', MNT_DETACH)", tmpdir->c_str());
+		PLOG_E("umount2(%s, MNT_DETACH)", QC(*tmpdir));
 		return false;
 	}
 
@@ -417,7 +420,7 @@ static bool initCloneNs(nsjconf_t* nsjconf) {
 		 */
 		if (util::syscall(__NR_pivot_root, (uintptr_t)destdir->c_str(),
 			(uintptr_t)destdir->c_str()) == -1) {
-			PLOG_E("pivot_root('%s', '%s')", destdir->c_str(), destdir->c_str());
+			PLOG_E("pivot_root(%s, %s)", QC(*destdir), QC(*destdir));
 			return false;
 		}
 
@@ -447,19 +450,19 @@ static bool initCloneNs(nsjconf_t* nsjconf) {
 		    "Use it with care!");
 
 		if (chdir(destdir->c_str()) == -1) {
-			PLOG_E("chdir('%s')", destdir->c_str());
+			PLOG_E("chdir(%s)", QC(*destdir));
 			return false;
 		}
 
 		/* mount moving the new root on top of '/'. This operation is atomic and doesn't
 		involve un-mounting '/' at any stage */
 		if (mount(".", "/", NULL, MS_MOVE, NULL) == -1) {
-			PLOG_E("mount('/', %s, NULL, MS_MOVE, NULL)", destdir->c_str());
+			PLOG_E("mount('/', %s, NULL, MS_MOVE, NULL)", QC(*destdir));
 			return false;
 		}
 
 		if (chroot(".") == -1) {
-			PLOG_E("chroot('%s')", destdir->c_str());
+			PLOG_E("chroot(%s)", QC(*destdir));
 			return false;
 		}
 	}
@@ -485,7 +488,7 @@ static bool initNsInternal(nsjconf_t* nsjconf) {
 	}
 
 	if (chdir(nsjconf->cwd.c_str()) == -1) {
-		PLOG_E("chdir('%s')", nsjconf->cwd.c_str());
+		PLOG_E("chdir(%s)", QC(nsjconf->cwd));
 		return false;
 	}
 	return true;
@@ -525,7 +528,7 @@ static bool addMountPt(mount_t* mnt, const std::string& src, const std::string& 
 	if (!src_env.empty()) {
 		const char* e = getenv(src_env.c_str());
 		if (e == NULL) {
-			LOG_W("No such envar:'%s'", src_env.c_str());
+			LOG_W("No such envar:%s", QC(src_env));
 			return false;
 		}
 		mnt->src = e;
@@ -535,7 +538,7 @@ static bool addMountPt(mount_t* mnt, const std::string& src, const std::string& 
 	if (!dst_env.empty()) {
 		const char* e = getenv(dst_env.c_str());
 		if (e == NULL) {
-			LOG_W("No such envar:'%s'", dst_env.c_str());
+			LOG_W("No such envar:%s", QC(dst_env));
 			return false;
 		}
 		mnt->dst = e;
@@ -605,18 +608,15 @@ bool addMountPtTail(nsjconf_t* nsjconf, const std::string& src, const std::strin
 const std::string describeMountPt(const mount_t& mpt) {
 	std::string descr;
 
-	descr.append(mpt.src.empty() ? "" : "'")
-	    .append(mpt.src.empty() ? "" : mpt.src)
-	    .append(mpt.src.empty() ? "" : "' -> ")
-	    .append("'")
-	    .append(mpt.dst)
-	    .append("' flags:")
+	descr.append(mpt.src.empty() ? "" : QC(mpt.src))
+	    .append(mpt.src.empty() ? "" : " -> ")
+	    .append(QC(mpt.dst))
+	    .append(" flags:")
 	    .append(flagsToStr(mpt.flags))
-	    .append(" type:'")
-	    .append(mpt.fs_type)
-	    .append("' options:'")
-	    .append(mpt.options)
-	    .append("'");
+	    .append(" type:")
+	    .append(QC(mpt.fs_type))
+	    .append(" options:")
+	    .append(QC(mpt.options));
 
 	if (mpt.is_dir) {
 		descr.append(" dir:true");

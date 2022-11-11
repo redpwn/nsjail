@@ -147,6 +147,7 @@ struct nsjconf_t {
 	std::string iface_vs_ma;
 	std::string iface_vs_mo;
 	bool disable_tsc;
+	bool forward_signals;
 	std::string cgroup_mem_mount;
 	std::string cgroup_mem_parent;
 	size_t cgroup_mem_max;
@@ -165,7 +166,6 @@ struct nsjconf_t {
 	bool use_cgroupv2;
 	scmp_filter_ctx seccomp_ctx;
 	int nice_level;
-	long num_cpus;
 	uid_t orig_uid;
 	uid_t orig_euid;
 	std::vector<mount_t> mountpts;

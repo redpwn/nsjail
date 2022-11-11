@@ -39,6 +39,8 @@
 		}                     \
 	} while (0)
 
+#define QC(x) util::StrQuote(x).c_str()
+
 namespace util {
 
 ssize_t readFromFd(int fd, void* buf, size_t len);
@@ -49,6 +51,7 @@ bool createDirRecursively(const char* dir);
 std::string* StrAppend(std::string* str, const char* format, ...)
     __attribute__((format(printf, 2, 3)));
 std::string StrPrintf(const char* format, ...) __attribute__((format(printf, 1, 2)));
+const std::string StrQuote(const std::string& str);
 bool isANumber(const char* s);
 uint64_t rnd64(void);
 const std::string sigName(int signo);

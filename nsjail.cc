@@ -34,6 +34,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <memory>
 #include <vector>
@@ -48,8 +49,8 @@
 
 namespace nsjail {
 
-static __thread int sigFatal = 0;
-static __thread bool showProc = false;
+static __thread std::atomic<int> sigFatal(0);
+static __thread std::atomic<bool> showProc(false);
 
 static void sigHandler(int sig) {
 	if (sig == SIGALRM || sig == SIGCHLD || sig == SIGPIPE) {
@@ -222,7 +223,8 @@ static int listenMode(nsjconf_t* nsjconf) {
 	}
 	for (;;) {
 		if (sigFatal > 0) {
-			subproc::killAndReapAll(nsjconf);
+			subproc::killAndReapAll(
+			    nsjconf, nsjconf->forward_signals ? sigFatal.load() : SIGKILL);
 			logs::logStop(sigFatal);
 			close(listenfd);
 			return EXIT_SUCCESS;
@@ -285,7 +287,8 @@ static int standaloneMode(nsjconf_t* nsjconf) {
 				subproc::displayProc(nsjconf);
 			}
 			if (sigFatal > 0) {
-				subproc::killAndReapAll(nsjconf);
+				subproc::killAndReapAll(
+				    nsjconf, nsjconf->forward_signals ? sigFatal.load() : SIGKILL);
 				logs::logStop(sigFatal);
 				return (128 + sigFatal);
 			}

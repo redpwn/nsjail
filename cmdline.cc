@@ -164,6 +164,7 @@ struct custom_option custom_opts[] = {
     { { "macvlan_vs_ma", required_argument, NULL, 0x705 }, "MAC-address of the 'vs' interface (e.g. \"ba:ad:ba:be:45:00\")" },
     { { "macvlan_vs_mo", required_argument, NULL, 0x706 }, "Mode of the 'vs' interface. Can be either 'private', 'vepa', 'bridge' or 'passthru' (default: 'private')" },
     { { "disable_tsc", no_argument, NULL, 0x707 }, "Disable rdtsc and rdtscp instructions. WARNING: To make it effective, you also need to forbid `prctl(PR_SET_TSC, PR_TSC_ENABLE, ...)` in seccomp rules! (x86 and x86_64 only). Dynamic binaries produced by GCC seem to rely on RDTSC, but static ones should work." },
+    { { "forward_signals", no_argument, NULL, 0x708 }, "Forward fatal signals to the child process instead of always using SIKGILL." },
 };
 // clang-format on
 
@@ -206,8 +207,7 @@ void addEnv(nsjconf_t* nsjconf, const std::string& env) {
 	}
 	char* e = getenv(env.c_str());
 	if (!e) {
-		LOG_W("Requested to use the '%s' envar, but it's not set. It'll be ignored",
-		    env.c_str());
+		LOG_W("Requested to use the %s envar, but it's not set. It'll be ignored", QC(env));
 		return;
 	}
 	nsjconf->envs.push_back(std::string(env).append("=").append(e));
@@ -233,13 +233,13 @@ void logParams(nsjconf_t* nsjconf) {
 	}
 
 	LOG_I(
-	    "Jail parameters: hostname:'%s', chroot:'%s', process:'%s', bind:[%s]:%d, "
+	    "Jail parameters: hostname:'%s', chroot:%s, process:'%s', bind:[%s]:%d, "
 	    "max_conns:%u, max_conns_per_ip:%u, time_limit:%" PRId64
 	    ", personality:%#lx, daemonize:%s, clone_newnet:%s, "
 	    "clone_newuser:%s, clone_newns:%s, clone_newpid:%s, clone_newipc:%s, clone_newuts:%s, "
 	    "clone_newcgroup:%s, clone_newtime:%s, keep_caps:%s, disable_no_new_privs:%s, "
 	    "max_cpus:%zu",
-	    nsjconf->hostname.c_str(), nsjconf->chroot.c_str(),
+	    nsjconf->hostname.c_str(), QC(nsjconf->chroot),
 	    nsjconf->exec_file.empty() ? nsjconf->argv[0].c_str() : nsjconf->exec_file.c_str(),
 	    nsjconf->bindhost.c_str(), nsjconf->port, nsjconf->max_conns, nsjconf->max_conns_per_ip,
 	    nsjconf->tlimit, nsjconf->personality, logYesNo(nsjconf->daemonize),
@@ -340,7 +340,7 @@ static bool setupArgv(nsjconf_t* nsjconf, int argc, char** argv, int optind) {
 #endif /* !defined(__NR_execveat) */
 		if ((nsjconf->exec_fd = TEMP_FAILURE_RETRY(
 			 open(nsjconf->exec_file.c_str(), O_RDONLY | O_PATH | O_CLOEXEC))) == -1) {
-			PLOG_W("Couldn't open '%s' file", nsjconf->exec_file.c_str());
+			PLOG_W("Couldn't open %s file", QC(nsjconf->exec_file));
 			return false;
 		}
 	}
@@ -477,9 +477,9 @@ std::unique_ptr<nsjconf_t> parseArgs(int argc, char* argv[]) {
 	nsjconf->iface_vs_ma = "";
 	nsjconf->iface_vs_mo = "private";
 	nsjconf->disable_tsc = false;
+	nsjconf->forward_signals = false;
 	nsjconf->orig_uid = getuid();
 	nsjconf->orig_euid = geteuid();
-	nsjconf->num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 	nsjconf->nice_level = 19;
 
 	nsjconf->openfds.push_back(STDIN_FILENO);
@@ -515,7 +515,7 @@ std::unique_ptr<nsjconf_t> parseArgs(int argc, char* argv[]) {
 			break;
 		case 'C':
 			if (!config::parseFile(nsjconf.get(), optarg)) {
-				LOG_F("Couldn't parse configuration from '%s' file", optarg);
+				LOG_F("Couldn't parse configuration from %s file", QC(optarg));
 			}
 			break;
 		case 'c':
@@ -548,13 +548,13 @@ std::unique_ptr<nsjconf_t> parseArgs(int argc, char* argv[]) {
 			nsjconf->daemonize = true;
 			break;
 		case 'v':
-			logs::logLevel(logs::DEBUG);
+			logs::setLogLevel(logs::DEBUG);
 			break;
 		case 'q':
-			logs::logLevel(logs::WARNING);
+			logs::setLogLevel(logs::WARNING);
 			break;
 		case 'Q':
-			logs::logLevel(logs::FATAL);
+			logs::setLogLevel(logs::FATAL);
 			break;
 		case 'e':
 			nsjconf->keep_env = true;
@@ -854,6 +854,9 @@ std::unique_ptr<nsjconf_t> parseArgs(int argc, char* argv[]) {
 			break;
 		case 0x707:
 			nsjconf->disable_tsc = true;
+			break;
+		case 0x708:
+			nsjconf->forward_signals = true;
 			break;
 		case 0x801:
 			nsjconf->cgroup_mem_max = (size_t)strtoull(optarg, NULL, 0);
